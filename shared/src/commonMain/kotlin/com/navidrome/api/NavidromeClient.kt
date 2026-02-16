@@ -191,7 +191,8 @@ data class Artist(
     val name: String = "",
     val coverArt: String? = null,
     val albumCount: Int = 0,
-    val artistImageUrl: String? = null
+    val artistImageUrl: String? = null,
+    val albumList: List<Album>? = null
 )
 
 @Serializable
@@ -207,7 +208,8 @@ data class Album(
     val songCount: Int = 0,
     val duration: Int = 0,
     val year: Int? = null,
-    val genre: String? = null
+    val genre: String? = null,
+    val songList: List<Song>? = null
 )
 
 @Serializable
