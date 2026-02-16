@@ -15,9 +15,9 @@ class AuthManagerObservable: ObservableObject {
     let authManager = AuthManager()
     
     @Published var isLoggedIn: Bool = false
-    @Published var baseUrl: String = "http://music.elgurudekatmandu.com"
-    @Published var username: String = "openclaw"
-    @Published var password: String = "bootstrap"
+    @Published var baseUrl: String = ""
+    @Published var username: String = ""
+    @Published var password: String = ""
     @Published var isLoading: Bool = false
     @Published var errorMessage: String? = nil
     

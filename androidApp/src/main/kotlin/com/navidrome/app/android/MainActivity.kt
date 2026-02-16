@@ -26,9 +26,9 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NavidromeApp(authManager: AuthManager) {
-    var baseUrl by remember { mutableStateOf("http://music.elgurudekatmandu.com") }
-    var username by remember { mutableStateOf("openclaw") }
-    var password by remember { mutableStateOf("bootstrap") }
+    var baseUrl by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoggedIn by remember { mutableStateOf(authManager.isConfigured) }
