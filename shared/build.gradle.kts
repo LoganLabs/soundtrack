@@ -13,20 +13,20 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation("io.ktor:ktor-client-core:2.3.7")
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
+                implementation("io.ktor:ktor-client-core:3.0.2")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
             }
         }
         val androidMain by getting {
             dependencies {
-                implementation("io.ktor:ktor-client-android:2.3.7")
+                implementation("io.ktor:ktor-client-android:3.0.2")
             }
         }
         val iosX64Main by getting
         val iosArm64Main by getting
         val iosSimulatorArm64Main by getting {
             dependencies {
-                implementation("io.ktor:ktor-client-darwin:2.3.7")
+                implementation("io.ktor:ktor-client-darwin:3.0.2")
             }
         }
     }
@@ -34,8 +34,8 @@ kotlin {
 
 android {
     namespace = "com.navidrome.shared"
-    compileSdk = 34
+    compileSdk = 35
     defaultConfig {
-        minSdk = 21
+        minSdk = 24
     }
 }
