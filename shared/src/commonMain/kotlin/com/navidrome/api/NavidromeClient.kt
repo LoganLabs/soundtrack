@@ -145,6 +145,13 @@ class NavidromeClient(
     }
 
     /**
+     * Obtener canciones aleatorias
+     */
+    suspend fun getRandomSongs(size: Int = 50): Result<RandomSongsResponse> = runCatching {
+        request<RandomSongsResponse>("getRandomSongs.view", mapOf("size" to size.toString()))
+    }
+
+    /**
      * Cerrar el cliente
      */
     fun close() {
@@ -249,3 +256,9 @@ data class SearchResult(
     val album: List<Album> = listOf(),
     val song: List<Song> = listOf()
 )
+
+@Serializable
+data class RandomSongsResponse(val randomSongs: RandomSongs)
+
+@Serializable
+data class RandomSongs(val song: List<Song> = listOf())

@@ -17,7 +17,6 @@ class AppState: ObservableObject {
     var viewModel: SoundtrackViewModel? = nil
     
     @Published var isLoggedIn: Bool = false
-    @Published var currentScreen: Screen = .ArtistList
 
     func login(baseUrl: String, username: String, password: String, completion: @escaping (Bool) -> Void) {
         Task {
@@ -28,7 +27,7 @@ class AppState: ObservableObject {
                     onSuccess: { [weak self] in
                         self?.viewModel = SoundtrackViewModel(client: self?.authManager.getClient())
                         self?.isLoggedIn = true
-                        self?.viewModel?.loadArtists()
+                        self?.viewModel?.loadHomeData()
                         completion(true)
                     },
                     onFailure: { _ in
@@ -108,7 +107,7 @@ struct LoginView: View {
                     isLoading = true
                     errorMessage = nil
                     
-                   Url: baseUrl appState.login(base, username: username, password: password) { success in
+                    appState.login(baseUrl: baseUrl, username: username, password: password) { success in
                         isLoading = false
                         if !success {
                             errorMessage = "Error al conectar"
@@ -123,7 +122,7 @@ struct LoginView: View {
                             Text("Conectar")
                         }
                     }
-                    .frame(maxWidth: .infinity)
+                   : .infinity .frame(maxWidth)
                     .padding()
                     .background(Color.blue)
                     .foregroundColor(.white)
@@ -145,8 +144,10 @@ struct MainView: View {
     var body: some View {
         Group {
             switch viewModel.currentScreen {
-            case .ArtistList:
-                ArtistListView(viewModel: viewModel)
+            case .Home:
+                HomeView(viewModel: viewModel)
+            case .Search:
+                SearchView(viewModel: viewModel)
             case .ArtistDetail:
                 ArtistDetailView(viewModel: viewModel)
             case .AlbumDetail:
@@ -154,34 +155,244 @@ struct MainView: View {
             case .Player:
                 PlayerView(viewModel: viewModel)
             default:
-                ArtistListView(viewModel: viewModel)
+                HomeView(viewModel: viewModel)
             }
         }
     }
 }
 
-struct ArtistListView: View {
+struct HomeView: View {
     @ObservedObject var viewModel: SoundtrackViewModel
+    @State private var searchText: String = ""
 
     var body: some View {
         NavigationStack {
-            List(viewModel.artists) { artist in
-                Button(action: {
-                    viewModel.loadArtistAlbums(artistId: artist.id)
-                }) {
-                    VStack(alignment: .leading) {
-                        Text(artist.name)
-                            .font(.headline)
-                        Text("\(artist.albumCount) álbumes")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+            VStack(spacing: 0) {
+                // Search bar
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Buscar...", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .onSubmit {
+                            if !searchText.isEmpty {
+                                viewModel.search(query: searchText)
+                            }
+                        }
+                    if !searchText.isEmpty {
+                        Button(action: { searchText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                .padding()
+                
+                if viewModel.isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Artists Section
+                            SectionView(title: "Artistas") {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 12) {
+                                        ForEach(viewModel.artists) { artist in
+                                            ArtistCard(artist: artist) {
+                                                viewModel.loadArtistAlbums(artistId: artist.id)
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                }
+                            }
+                            
+                            // Albums Section
+                            SectionView(title: "Álbumes") {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 12) {
+                                        ForEach(viewModel.allAlbums) { album in
+                                            AlbumCard(album: album) {
+                                                viewModel.openAlbum(albumId: album.id)
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                }
+                            }
+                            
+                            // Songs Section
+                            SectionView(title: "Canciones") {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 12) {
+                                        ForEach(viewModel.allSongs) { song in
+                                            SongCard(song: song) {
+                                                viewModel.playSong(song: song, playlist: viewModel.allSongs)
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                }
+                            }
+                        }
+                        .padding(.bottom)
                     }
                 }
             }
-            .navigationTitle("Artistas")
-            .overlay {
-                if viewModel.isLoading {
-                    ProgressView()
+            .navigationTitle("Soundtrack")
+        }
+    }
+}
+
+struct SectionView<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.title2)
+                .fontWeight(.bold)
+                .padding(.horizontal)
+            content()
+        }
+    }
+}
+
+struct ArtistCard: View {
+    let artist: Artist
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            VStack {
+                Image(systemName: "person.circle.fill")
+                    .font(.system(size: 50))
+                    .foregroundColor(.blue)
+                Text(artist.name)
+                    .font(.caption)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 80)
+            }
+            .frame(width: 80)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct AlbumCard: View {
+    let album: Album
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading) {
+                Image(systemName: "square.stack")
+                    .font(.system(size: 50))
+                    .foregroundColor(.orange)
+                    .frame(width: 100, height: 80)
+                Text(album.name)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .frame(width: 100, alignment: .leading)
+                Text(album.artist)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(width: 100)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct SongCard: View {
+    let song: Song
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading) {
+                Text(song.title)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Text(song.artist)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(width: 150, alignment: .leading)
+            .padding(12)
+            .background(Color(.systemGray6))
+            .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct SearchView: View {
+    @ObservedObject var viewModel: SoundtrackViewModel
+    
+    var body: some View {
+        List {
+            if !viewModel.searchResults.artists.isEmpty {
+                Section("Artistas") {
+                    ForEach(viewModel.searchResults.artists) { artist in
+                        Button(action: {
+                            viewModel.loadArtistAlbums(artistId: artist.id)
+                        }) {
+                            Text(artist.name)
+                        }
+                    }
+                }
+            }
+            
+            if !viewModel.searchResults.albums.isEmpty {
+                Section("Álbumes") {
+                    ForEach(viewModel.searchResults.albums) { album in
+                        Button(action: {
+                            viewModel.openAlbum(albumId: album.id)
+                        }) {
+                            VStack(alignment: .leading) {
+                                Text(album.name)
+                                Text(album.artist)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if !viewModel.searchResults.songs.isEmpty {
+                Section("Canciones") {
+                    ForEach(viewModel.searchResults.songs) { song in
+                        Button(action: {
+                            viewModel.playSong(song: song, playlist: viewModel.searchResults.songs)
+                        }) {
+                            VStack(alignment: .leading) {
+                                Text(song.title)
+                                Text(song.artist)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Resultados")
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Volver") {
+                    viewModel.clearSearch()
+                    viewModel.goBack()
                 }
             }
         }
@@ -194,7 +405,7 @@ struct ArtistDetailView: View {
     var body: some View {
         List(viewModel.albums) { album in
             Button(action: {
-                viewModel.loadAlbumSongs(albumId: album.id)
+                viewModel.openAlbum(albumId: album.id)
             }) {
                 VStack(alignment: .leading) {
                     Text(album.name)
@@ -206,7 +417,7 @@ struct ArtistDetailView: View {
             }
         }
         .navigationTitle(viewModel.currentArtist?.name ?? "Artista")
-       ButtonHidden .navigationBarBack(true)
+        .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button("Volver") {
