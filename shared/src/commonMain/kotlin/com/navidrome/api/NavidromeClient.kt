@@ -1,8 +1,12 @@
 package com.navidrome.api
 
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.http.*
 import kotlinx.coroutines.*
-import kotlinx.serialization.*
 import kotlinx.serialization.json.*
+import java.security.MessageDigest
 
 /**
  * Cliente para la API Subsonic/Navidrome
@@ -14,6 +18,8 @@ class NavidromeClient(
     private val username: String,
     private val password: String
 ) {
+    private val httpClient = HttpClient()
+    
     private val json = Json { 
         ignoreUnknownKeys = true 
         isLenient = true 
@@ -32,124 +38,137 @@ class NavidromeClient(
     }
 
     private fun md5(input: String): String {
-        // Simplified MD5 placeholder - in production use java.security.MessageDigest
-        // For now, we'll use a simple implementation
-        return input.hashCode().toString(16).padStart(8, '0')
+        val md = MessageDigest.getInstance("MD5")
+        val digest = md.digest(input.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
     }
 
-    private suspend fun request(endpoint: String, params: Map<String, String> = emptyMap()): String {
-        return withContext(Dispatchers.IO) {
-            val queryParams = params.toMutableMap()
-            queryParams["u"] = username
-            queryParams["t"] = token
-            queryParams["s"] = salt
-            queryParams["v"] = "1.16.1"
-            queryParams["c"] = "NavidromeApp"
-            queryParams["f"] = "json"
+    private fun buildUrl(endpoint: String, params: Map<String, String> = emptyMap()): String {
+        val queryParams = params.toMutableMap()
+        queryParams["u"] = username
+        queryParams["t"] = token
+        queryParams["s"] = salt
+        queryParams["v"] = "1.16.1"
+        queryParams["c"] = "NavidromeApp"
+        queryParams["f"] = "json"
 
-            val url = "$baseUrl/rest/$endpoint?${queryParams.toList().joinToString("&") { "${it.key}=${it.value}" }}"
-            url
-        }
+        val queryString = queryParams.toList().joinToString("&") { "${it.key}=${it.value}" }
+        return "$baseUrl/rest/$endpoint?$queryString"
+    }
+
+    private inline fun <reified T> request(endpoint: String, params: Map<String, String> = emptyMap()): T {
+        val url = buildUrl(endpoint, params)
+        val response = httpClient.get(url)
+        val body = response.bodyAsText()
+        
+        // La respuesta viene envuelta en "subsonic-response"
+        val wrapper = json.decodeFromString<SubsonicResponse<T>>(body)
+        return wrapper.subsonicResponse
     }
 
     /**
      * Test de conectividad
      */
     suspend fun ping(): Result<PingResponse> = runCatching {
-        val url = request("ping.view")
-        println("PING: $url")
-        PingResponse(ok = true)
+        request<PingResponse>("ping.view")
     }
 
     /**
      * Obtener todos los artistas
      */
     suspend fun getArtists(): Result<ArtistsResponse> = runCatching {
-        val url = request("getArtists.view")
-        println("GET_ARTISTS: $url")
-        ArtistsResponse(artists = ArtistsIndex(listOf()))
+        request<ArtistsResponse>("getArtists.view")
     }
 
     /**
      * Obtener detalles de un artista
      */
     suspend fun getArtist(id: String): Result<ArtistResponse> = runCatching {
-        val url = request("getArtist.view", mapOf("id" to id))
-        println("GET_ARTIST: $url")
-        ArtistResponse(artist = Artist(id = id, name = ""))
+        request<ArtistResponse>("getArtist.view", mapOf("id" to id))
     }
 
     /**
      * Obtener álbum
      */
     suspend fun getAlbum(id: String): Result<AlbumResponse> = runCatching {
-        val url = request("getAlbum.view", mapOf("id" to id))
-        println("GET_ALBUM: $url")
-        AlbumResponse(album = Album(id = id, name = "", songCount = 0, duration = 0))
+        request<AlbumResponse>("getAlbum.view", mapOf("id" to id))
     }
 
     /**
      * Obtener canción
      */
     suspend fun getSong(id: String): Result<SongResponse> = runCatching {
-        val url = request("getSong.view", mapOf("id" to id))
-        println("GET_SONG: $url")
-        SongResponse(song = Song(id = id, title = "", artist = "", album = "", duration = 0))
+        request<SongResponse>("getSong.view", mapOf("id" to id))
     }
 
     /**
      * URL para stream de audio
      */
     fun getStreamUrl(id: String, format: String = "mp3"): String {
-        return "$baseUrl/rest/stream.view?id=$id&format=$format&u=$username&t=$token&s=$salt&v=1.16.1&c=NavidromeApp"
+        return buildUrl("stream.view", mapOf("id" to id, "format" to format))
     }
 
     /**
      * URL para portada de álbum
      */
     fun getCoverArtUrl(id: String, size: Int = 300): String {
-        return "$baseUrl/rest/getCoverArt.view?id=$id&size=$size"
+        return buildUrl("getCoverArt.view", mapOf("id" to id, "size" to size.toString()))
     }
 
     /**
      * Marcar como favorita
      */
     suspend fun star(id: String): Result<Unit> = runCatching {
-        val url = request("star.view", mapOf("id" to id))
-        println("STAR: $url")
+        request<StarResponse>("star.view", mapOf("id" to id))
     }
 
     /**
      * Quitar de favoritos
      */
     suspend fun unstar(id: String): Result<Unit> = runCatching {
-        val url = request("unstar.view", mapOf("id" to id))
-        println("UNSTAR: $url")
+        request<StarResponse>("unstar.view", mapOf("id" to id))
     }
 
     /**
      * Lista de álbumes (recientes, favoritos, etc.)
+     * Tipos: random, newest, recent, frequent, alphabetialByName, alphabetialByArtist
      */
     suspend fun getAlbumList(type: String, size: Int = 20): Result<AlbumListResponse> = runCatching {
-        val url = request("getAlbumList2.view", mapOf("type" to type, "size" to size.toString()))
-        println("GET_ALBUM_LIST: $url")
-        AlbumListResponse(albumList = AlbumList(listOf()))
+        request<AlbumListResponse>("getAlbumList2.view", mapOf("type" to type, "size" to size.toString()))
     }
 
     /**
      * Buscar
      */
     suspend fun search(query: String): Result<SearchResponse> = runCatching {
-        val url = request("search3.view", mapOf("query" to query))
-        println("SEARCH: $url")
-        SearchResponse(searchResult = SearchResult(listOf()))
+        request<SearchResponse>("search3.view", mapOf("query" to query))
+    }
+
+    /**
+     * Cerrar el cliente
+     */
+    fun close() {
+        httpClient.close()
     }
 }
 
-// ============== DATA MODELS ==============
+// ============== WRAPPER ==============
 
 @Serializable
-data class PingResponse(val ok: Boolean = true)
+data class SubsonicResponse<T>(
+    @SerialName("subsonic-response")
+    val subsonicResponse: T
+)
+
+@Serializable
+data class StarResponse(val status: String = "ok")
+
+@Serializable
+data class PingResponse(
+    val status: String = "ok",
+    val version: String = "",
+    val type: String = ""
+)
 
 @Serializable
 data class ArtistsResponse(val artists: ArtistsIndex)
@@ -171,7 +190,8 @@ data class Artist(
     val id: String = "",
     val name: String = "",
     val coverArt: String? = null,
-    val albumCount: Int = 0
+    val albumCount: Int = 0,
+    val artistImageUrl: String? = null
 )
 
 @Serializable
@@ -186,7 +206,8 @@ data class Album(
     val coverArt: String? = null,
     val songCount: Int = 0,
     val duration: Int = 0,
-    val year: Int? = null
+    val year: Int? = null,
+    val genre: String? = null
 )
 
 @Serializable
